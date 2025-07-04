@@ -16,7 +16,6 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 load_dotenv()
 
-# === 설정값 모음 ===
 config = {
     "kakao_path": "data/kakao_chat.txt",
     "csv_path": "data/tmi.csv",
@@ -29,7 +28,6 @@ config = {
     "font_path": "malgun.ttf",  # mac 사용자는 "NanumGothic.ttf" 등으로 교체
 }
 
-# === 문서 불러오기 ===
 def load_kakao_chat(filepath):
     with open(filepath, encoding="utf-8") as f:
         lines = f.readlines()
@@ -67,7 +65,6 @@ def load_all_documents():
     tmi_docs = load_tmi_csv(config["csv_path"])
     return kakao_docs + tmi_docs
 
-# === 벡터스토어 생성/로드 ===
 def build_vectorstore(documents):
     splitter = CharacterTextSplitter(chunk_size=config["chunk_size"], chunk_overlap=config["chunk_overlap"])
     split_docs = splitter.split_documents(documents)
@@ -77,11 +74,6 @@ def build_vectorstore(documents):
     vectorstore.save_local(config["vector_path"])
     return vectorstore
 
-def load_vectorstore():
-    embedding = OpenAIEmbeddings()
-    return FAISS.load_local(config["vector_path"], embedding, allow_dangerous_deserialization=True)
-
-# === DB 함수 ===
 def save_chat(question, answer):
     conn = sqlite3.connect(config["db_path"])
     cursor = conn.cursor()
@@ -109,7 +101,6 @@ def load_chat_history(limit=None):
     conn.close()
     return rows[::-1]
 
-# === 답변 생성 ===
 def answer_query(query, vectorstore):
     retriever = vectorstore.as_retriever()
     related_docs = retriever.invoke(query)
