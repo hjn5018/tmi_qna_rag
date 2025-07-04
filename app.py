@@ -1,5 +1,6 @@
-import re
+import streamlit as st
 import sqlite3
+import re
 import pandas as pd
 from datetime import datetime
 
@@ -19,7 +20,6 @@ CSV_PATH = "data/tmi.csv"
 DB_PATH = "db/chat_history.db"
 VECTOR_PATH = "db/tmi_faiss"
 
-# 🧹 카카오톡 메시지 파싱
 def load_kakao_chat(filepath):
     with open(filepath, encoding="utf-8") as f:
         lines = f.readlines()
@@ -44,12 +44,10 @@ def load_kakao_chat(filepath):
 
     return documents
 
-# 🧾 TMI CSV 로드
 def load_tmi_csv(filepath):
     df = pd.read_csv(filepath)
     return [Document(page_content=row["tmi"]) for _, row in df.iterrows()]
 
-# 🧠 인덱싱 통합 (tmi.csv + kakao_chat.txt)
 def ingest_all():
     kakao_docs = load_kakao_chat(KAKAO_PATH)
     tmi_docs = load_tmi_csv(CSV_PATH)
@@ -62,7 +60,6 @@ def ingest_all():
     vectorstore = FAISS.from_documents(split_docs, embedding)
     vectorstore.save_local(VECTOR_PATH)
 
-# 💾 대화 저장
 def save_chat(question, answer):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -81,8 +78,7 @@ def save_chat(question, answer):
     conn.commit()
     conn.close()
 
-# 🔄 대화 불러오기
-def load_chat_history(limit=5):
+def load_chat_history(limit=10):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT question, answer FROM chat_log ORDER BY id DESC LIMIT ?", (limit,))
@@ -90,9 +86,8 @@ def load_chat_history(limit=5):
     conn.close()
     return rows[::-1]
 
-# 🧠 응답 생성
 def answer_query(query):
-    ingest_all()  # ✅ 항상 최신 kakao + tmi를 ingest
+    ingest_all()
 
     embedding = OpenAIEmbeddings()
     vectorstore = FAISS.load_local(VECTOR_PATH, embedding, allow_dangerous_deserialization=True)
@@ -122,17 +117,22 @@ def answer_query(query):
     response = llm.invoke(messages)
     return response.content.strip()
 
-# 🚀 메인 루프
-def main():
-    print("TMI 챗봇입니다. 질문을 입력하세요. 종료하려면 'exit'를 입력하세요.")
-    while True:
-        query = input("질문 > ").strip()
-        if query.lower() == "exit":
-            print("종료합니다.")
-            break
-        answer = answer_query(query)
-        print("🤖:", answer)
-        save_chat(query, answer)
+# Streamlit 앱
+st.title("TMI 챗봇 (Streamlit)")
 
-if __name__ == "__main__":
-    main()
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+query = st.text_input("질문을 입력하세요:", "")
+
+if st.button("질문하기") and query.strip() != "":
+    with st.spinner("답변 생성 중..."):
+        answer = answer_query(query)
+        save_chat(query, answer)
+        st.session_state.history.append((query, answer))
+
+if st.session_state.history:
+    st.write("## 대화 기록")
+    for i, (q, a) in enumerate(st.session_state.history):
+        st.markdown(f"**Q{i+1}:** {q}")
+        st.markdown(f"**A{i+1}:** {a}")
